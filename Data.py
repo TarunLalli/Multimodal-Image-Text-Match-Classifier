@@ -10,10 +10,6 @@ test_data = load_dataset("jxie/flickr8k", split='test')
 train_data = load_dataset("jxie/flickr8k",split='train')
 valid_data = load_dataset("jxie/flickr8k",split='validation')
 
-print(train_data)
-print(test_data)
-print(valid_data)
-
 dataset_train_temp_caps = train_data['caption_0'][:1000]
 dataset_train_temp_imgs = train_data['image'][:1000]
 
@@ -78,17 +74,21 @@ class Dataset(torch.utils.data.Dataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        return((self.image_transform(self.data[index][0]),self.text_tokeniser(self.data[1]),self.data[2]))
+        return((self.image_transform(self.data[index][0]),self.text_tokeniser(self.data[index][1]),self.data[index][2]))
 
     def image_transform(self, image):
         transform = transforms.Compose([
-            transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)),
-            transforms.ToTensor()
+            transforms.functional.pil_to_tensor,
+            transforms.ConvertImageDtype(torch.float32),
+            transforms.Normalize(
+                mean=(0.5, 0.5, 0.5),
+                std=(0.5, 0.5, 0.5)
+            )
         ])
         return transform(image)
     
     def text_tokeniser(self,text):
-        return((self.vocab.__getitem__(token) for token in self.tokenizer(text)))
+        return([self.vocab.__getitem__(token) for token in self.tokenizer(text)])
     
 def collate_fn(batch):
     #Expecting input as follows ((img_tensori,cap_tensori,labeli), (img_tensori+1,cap_tensori+1,labeli+1), ...)
@@ -113,7 +113,7 @@ def collate_fn(batch):
             cap.append(pad_id)
             pair_mask.append(0)
 
-        inputs.append((img,pair))
+        inputs.append((img,cap))
         attention_mask.append(pair_mask)
 
     return inputs, labels, attention_mask
