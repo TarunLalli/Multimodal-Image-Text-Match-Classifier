@@ -81,8 +81,8 @@ class Dataset(torch.utils.data.Dataset):
             transforms.functional.pil_to_tensor,
             transforms.ConvertImageDtype(torch.float32),
             transforms.Normalize(
-                mean=(0.5, 0.5, 0.5),
-                std=(0.5, 0.5, 0.5)
+                mean=(0.485, 0.456, 0.406),
+                std=(0.229, 0.224, 0.225)
             )
         ])
         return transform(image)
@@ -94,26 +94,12 @@ def collate_fn(batch):
     #Expecting input as follows ((img_tensori,cap_tensori,labeli), (img_tensori+1,cap_tensori+1,labeli+1), ...)
     #Expected output as follows ((img_tensori, cap_tensori),(img_tensori+1, padded_cap_tensori+1), ...), (labeli, labeli+1, ...)
 
-    pad_id = vocab["<unk>"]
-
     inputs = []
     labels = []
-    attention_mask = []
-    l_max = len(max([
-                pair[1] for pair in batch
-            ], key=len))
     
     for pair in batch:
         labels.append(pair[2])
-        img = pair[0]
-        cap = pair[1]
-        pair_mask = [1 for _ in range(len(cap))]
 
-        while len(cap) < l_max:
-            cap.append(pad_id)
-            pair_mask.append(0)
+        inputs.append((pair[0],pair[1]))
 
-        inputs.append((img,cap))
-        attention_mask.append(pair_mask)
-
-    return inputs, labels, attention_mask
+    return (inputs, labels)
