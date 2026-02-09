@@ -4,6 +4,10 @@ import Data
 from sentence_transformers import SentenceTransformer
 import tqdm
 
+# Next 1hr targets:
+    # Determine how cross loss entroy works (what inputs and target tensors does it take)
+    # Finish training loop
+
 class MultiModalModel(nn.Module):
     def __init__(self):
         super().__init__()
@@ -42,7 +46,7 @@ def training_loop(epochs, dataloader, model):
         loop = tqdm(model, leave= True)
         for batch in loop:
             inputs, labels = batch[0], batch[1]
-            
+
 
 
 def main():
