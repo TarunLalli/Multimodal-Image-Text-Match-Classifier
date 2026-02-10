@@ -5,8 +5,8 @@ from sentence_transformers import SentenceTransformer
 import tqdm
 
 # Next 1hr targets:
-    # Determine how cross loss entroy works (what inputs and target tensors does it take)
-    # Finish training loop
+    # Test and Debug Training Loop
+    # Start Eval Loop
 
 class MultiModalModel(nn.Module):
     def __init__(self):
@@ -40,14 +40,35 @@ class MultiModalModel(nn.Module):
         # returning logits
         return pred_logits
 
-def training_loop(epochs, dataloader, model):
+def training_loop(epochs, dataloader, model, device):
+    model.to(device)
+    # Instantiating optimiser
+    optimiser = torch.optim.Adam(params=model.parameters())
+    # Instantiating loss funct
+    criterion = nn.functional.cross_entropy()
+    # Iterating over each epoch
     for epoch in range(len(epochs)):
+        # setting model to training mode
         model.train()
-        loop = tqdm(model, leave= True)
+        # Setting up loop
+        loop = tqdm(dataloader, leave= True)
+        # Iterating over each batch
         for batch in loop:
-            inputs, labels = batch[0], batch[1]
+            # Zeroing batch grafients to stop gradient stacking over batches
+            optimiser.zero_grad()
+            # Passing values to model
+            inputs, labels = batch[0].to(device), batch[1].to(device)
+            outputs = model(inputs)
+            # Loss calc and back prop
+            loss = criterion(outputs, labels)
+            loss.backward()
+            # Updating parameters
+            optimiser.step()
 
+        loop.set_description(f"Epoch [{epoch+1}/{epochs}]")
 
+    print("Training Complete.")
+    return model
 
 def main():
     ...
