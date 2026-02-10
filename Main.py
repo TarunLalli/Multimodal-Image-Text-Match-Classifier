@@ -44,10 +44,8 @@ def training_loop(epochs, dataloader, model, device):
     model.to(device)
     # Instantiating optimiser
     optimiser = torch.optim.Adam(params=model.parameters())
-    # Instantiating loss funct
-    criterion = nn.functional.cross_entropy()
     # Iterating over each epoch
-    for epoch in range(len(epochs)):
+    for epoch in range(epochs):
         # setting model to training mode
         model.train()
         # Setting up loop
@@ -60,7 +58,7 @@ def training_loop(epochs, dataloader, model, device):
             inputs, labels = batch[0].to(device), batch[1].to(device)
             outputs = model(inputs)
             # Loss calc and back prop
-            loss = criterion(outputs, labels)
+            loss = nn.functional.cross_entropy(outputs, labels)
             loss.backward()
             # Updating parameters
             optimiser.step()
@@ -71,7 +69,15 @@ def training_loop(epochs, dataloader, model, device):
     return model
 
 def main():
-    ...
+    train_dataset = Data.dataset_train
+    test_dataset = Data.dataset_test
+    valid_dataset = Data.dataset_valid
+
+    train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=50, collate_fn = Data.collate_fn)
+
+    training_loop(epochs=1, dataloader=train_dataloader, model = MultiModalModel(), device='mps')
+
+    test_dataloader = torch.utils.data.Dataloader(dataset=test_dataset, batch_size=25, collate_fn = Data.collate_fn)
 
 if __name__ == '__main__':
     main()
