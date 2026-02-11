@@ -91,15 +91,16 @@ class Dataset(torch.utils.data.Dataset):
         return([self.vocab.__getitem__(token) for token in self.tokenizer(text)])
     
 def collate_fn(batch):
-    #Expecting input as follows ((img_tensori,cap_tensori,labeli), (img_tensori+1,cap_tensori+1,labeli+1), ...)
-    #Expected output as follows ((img_tensori, cap_tensori),(img_tensori+1, padded_cap_tensori+1), ...), (labeli, labeli+1, ...)
+    #Expecting input as follows ((img_tensor_i, caption_string_list_i, label_i),(...),...)
+    #Expected Output as follows ((img_tensor_i,...), (caption_string_list_i,...), (label_i,...)
 
-    inputs = []
+    images = []
+    captions = []
     labels = []
     
-    for pair in batch:
-        labels.append(pair[2])
+    for set in batch:
+        labels.append(set[2])
+        captions.append(set[1])
+        images.append(set[0])
 
-        inputs.append((pair[0],pair[1]))
-
-    return (inputs, labels)
+    return (images, captions, labels)
