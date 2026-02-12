@@ -6,16 +6,15 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 # Next 1hr targets:
-    # Sort out how the Data is ingested into the model:
-        # Should it be (image, caption) pairs or should it be (image) (caption) lists?
-        # How does the forward method process a batch?
-            # Instance by instance in the batch or does it pass a full batch that is then all processed at once sequentially? E.g. all (image) then all (caption)??
+    # Sort out dimensions of image and text embeddings so tht they can be concatenated
+    # need to apply flatten(1) to image embedding to get rid of extra singleton dimensions
+
 
 class MultiModalModel(nn.Module):
     def __init__(self):
         super().__init__()
         # Instantiating pretrained Sentence BERT style encoder
-        self.transformer_encoder = SentenceTransformer("all-MiniLM-L6-v2")
+        self.transformer_encoder = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
         # Instantiating pretrained ResNet
         model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
         # Removing prediction head from ResNet
@@ -32,17 +31,20 @@ class MultiModalModel(nn.Module):
         # We expect an input to be a tuble of the form (img tensor, capt tensor)
             # Where img tensor is the normalised (C,W,D) tensor and capt is a list of each word/punct in a sentence
         img_embeddings = self.resnet(images) #Ouptut dimension: 512
-        text_embeddings = self.transformer_encoder(captions) #Output dimension: 384
+        text_embeddings = self.transformer_encoder.encode(
+                                captions,
+                                convert_to_tensor=True,
+                                device=images.device
+                            ) #Output dimension: 384
         # Normalising each embedings vectors before concatenation
         img_embed_norm = img_embeddings/torch.norm(img_embeddings)
         text_embed_norm = text_embeddings/torch.norm(text_embeddings)
         # Combining embeddings
-        comb_embed
-        comb_embed = torch.concat((img_embed_norm,text_embed_norm), dim = 0) #Dimension: 896
+        #comb_embed = torch.concat((img_embed_norm,text_embed_norm), dim = 1) #Dimension: 896
         # Passing through MLP head
-        pred_logits = self.classificationHead(comb_embed)
+        #pred_logits = self.classificationHead(comb_embed)
         # returning logits
-        return pred_logits
+        return img_embed_norm, text_embed_norm  #pred_logits
 
 def training_loop(epochs, dataloader, model, device):
     model.to(device)
@@ -59,23 +61,24 @@ def training_loop(epochs, dataloader, model, device):
             # Zeroing batch gradients to stop gradient stacking over batches
             optimiser.zero_grad()
             # Passing values to model
-            input_img, input_cap, labels = torch.tensor(batch[0], dtype=torch.float32).to(device), batch[1], torch.tensor(batch[2], dtype=torch.float32).to(device)
-            outputs = model(input_img, input_cap)
+            input_img, input_cap, labels = torch.stack(batch[0], dim=0).to(device), batch[1], torch.tensor(batch[2], dtype=torch.float32).to(device)
+            img_embed_norm, text_embed_norm = model(input_img, input_cap)
+            print(img_embed_norm)
             # Loss calc and back prop
             loss = nn.functional.cross_entropy(outputs, labels)
             loss.backward()
             # Updating parameters
             optimiser.step()
 
-        loop.set_description(f"Epoch [{epoch+1}/{epochs}]")
+        #loop.set_description(f"Epoch [{epoch+1}/{epochs}]")
 
     print("Training Complete.")
     return model
 
 def main():
-    train_dataset = Data.dataset_train
-    test_dataset = Data.dataset_test
-    valid_dataset = Data.dataset_valid
+    train_dataset = Data.Dataset(Data.dataset_train, tokenizer=Data.tokenizer, vocab=Data.vocab)
+    test_dataset = Data.Dataset(Data.dataset_test, tokenizer=Data.tokenizer, vocab=Data.vocab)
+    valid_dataset = Data.Dataset(Data.dataset_valid, tokenizer=Data.tokenizer, vocab=Data.vocab)
 
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=50, collate_fn = Data.collate_fn)
 

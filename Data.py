@@ -5,6 +5,8 @@ from torchtext.vocab import build_vocab_from_iterator
 import os
 import random
 from torchvision import transforms
+from torchvision.transforms import functional
+
 
 test_data = load_dataset("jxie/flickr8k", split='test')
 train_data = load_dataset("jxie/flickr8k",split='train')
@@ -74,10 +76,12 @@ class Dataset(torch.utils.data.Dataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        return((self.image_transform(self.data[index][0]),self.text_tokeniser(self.data[index][1]),self.data[index][2]))
+        return((self.image_transform(self.data[index][0]),self.data[index][1],self.data[index][2]))
 
     def image_transform(self, image):
         transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
             transforms.functional.pil_to_tensor,
             transforms.ConvertImageDtype(torch.float32),
             transforms.Normalize(
@@ -86,9 +90,6 @@ class Dataset(torch.utils.data.Dataset):
             )
         ])
         return transform(image)
-    
-    def text_tokeniser(self,text):
-        return([self.vocab.__getitem__(token) for token in self.tokenizer(text)])
     
 def collate_fn(batch):
     #Expecting input as follows ((img_tensor_i, caption_string_list_i, label_i),(...),...)
