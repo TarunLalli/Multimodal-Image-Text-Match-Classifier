@@ -31,6 +31,7 @@ class MultiModalModel(nn.Module):
         # We expect an input to be a tuble of the form (img tensor, capt tensor)
             # Where img tensor is the normalised (C,W,D) tensor and capt is a list of each word/punct in a sentence
         img_embeddings = self.resnet(images) #Ouptut dimension: 512
+        img_embeddings = img_embeddings.flatten(1) #Removing Singleton Dimensions
         text_embeddings = self.transformer_encoder.encode(
                                 captions,
                                 convert_to_tensor=True,
@@ -40,11 +41,11 @@ class MultiModalModel(nn.Module):
         img_embed_norm = img_embeddings/torch.norm(img_embeddings)
         text_embed_norm = text_embeddings/torch.norm(text_embeddings)
         # Combining embeddings
-        #comb_embed = torch.concat((img_embed_norm,text_embed_norm), dim = 1) #Dimension: 896
+        comb_embed = torch.concat((img_embed_norm,text_embed_norm), dim = 1) #Dimension: 896
         # Passing through MLP head
-        #pred_logits = self.classificationHead(comb_embed)
+        pred_logits = self.classificationHead(comb_embed)
         # returning logits
-        return img_embed_norm, text_embed_norm  #pred_logits
+        return pred_logits
 
 def training_loop(epochs, dataloader, model, device):
     model.to(device)
@@ -62,8 +63,7 @@ def training_loop(epochs, dataloader, model, device):
             optimiser.zero_grad()
             # Passing values to model
             input_img, input_cap, labels = torch.stack(batch[0], dim=0).to(device), batch[1], torch.tensor(batch[2], dtype=torch.float32).to(device)
-            img_embed_norm, text_embed_norm = model(input_img, input_cap)
-            print(img_embed_norm)
+            outputs = model(input_img, input_cap)
             # Loss calc and back prop
             loss = nn.functional.cross_entropy(outputs, labels)
             loss.backward()
