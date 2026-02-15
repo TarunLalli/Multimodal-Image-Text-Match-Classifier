@@ -48,7 +48,7 @@ for i in range(len(dataset_train_temp_caps)):
     dataset_train.append((dataset_train_temp_imgs[i],dataset_train_temp_caps[j],0))
 
 for i in range(len(dataset_test_temp_caps)):
-    dataset_train.append((dataset_test_temp_imgs[i],dataset_test_temp_caps[i],1))
+    dataset_test.append((dataset_test_temp_imgs[i],dataset_test_temp_caps[i],1))
 
     j = random.randint(0,len(dataset_test_temp_caps)-1)
     while j == i:

@@ -9,9 +9,8 @@ from tqdm import tqdm
     # Finish Eval Loop
     # Visualise Eval results
 
-
 class MultiModalModel(nn.Module):
-    def __init__(self, ablation=None):
+    def __init__(self):
         super().__init__()
         # Instantiating pretrained Sentence BERT style encoder
         self.transformer_encoder = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
@@ -27,10 +26,10 @@ class MultiModalModel(nn.Module):
         # Instantiating trainable prediction head for combined embeddings
         self.classificationHead = nn.Sequential(nn.Linear(in_features=896, out_features=256), nn.ReLU(), nn.Linear(in_features=256, out_features=2))
 
-    def forward(self, images, captions):
+    def forward(self, images, captions, ablation=None):
         # We expect an input to be a tuble of the form (img tensor, capt tensor)
             # Where img tensor is the normalised (C,W,D) tensor and capt is a list of each word/punct in a sentence
-        if self.ablation == None:
+        if ablation == None:
             img_embeddings = self.resnet(images) #Ouptut dimension: 512
             img_embeddings = img_embeddings.flatten(1) #Removing Singleton Dimensions
             text_embeddings = self.transformer_encoder.encode(
@@ -39,11 +38,11 @@ class MultiModalModel(nn.Module):
                                 device=images.device
                             ) #Output dimension: 384
             # Normalising each embedings vectors before concatenation
-            img_embed_norm = img_embeddings/torch.norm(img_embeddings)
-            text_embed_norm = text_embeddings/torch.norm(text_embeddings)
+            img_embed_norm = img_embeddings/torch.norm(img_embeddings, dim=1, keepdim=True)
+            text_embed_norm = text_embeddings/torch.norm(text_embeddings, dim=1, keepdim=True)
         
-        elif self.ablation == 'No_Image':
-            img_embeddings = torch.zeros((images.shape[0],512)) #Ouptut dimension: 512
+        elif ablation == 'No_Image':
+            img_embeddings = torch.zeros((images.shape[0],512)).to('mps') #Ouptut dimension: 512
             text_embeddings = self.transformer_encoder.encode(
                                 captions,
                                 convert_to_tensor=True,
@@ -51,15 +50,15 @@ class MultiModalModel(nn.Module):
                             ) #Output dimension: 384
             # Normalising each embedings vectors before concatenation
             img_embed_norm = img_embeddings
-            text_embed_norm = text_embeddings/torch.norm(text_embeddings)
+            text_embed_norm = text_embeddings/torch.norm(text_embeddings, dim=1, keepdim=True)
             
             
-        elif self.ablation == 'No_Text':
-            text_embeddings = torch.zeros((len(captions),384))
+        elif ablation == 'No_Text':
+            text_embeddings = torch.zeros((len(captions),384)).to('mps')
             img_embeddings = self.resnet(images) #Ouptut dimension: 512
             img_embeddings = img_embeddings.flatten(1) #Removing Singleton Dimensions
             # Normalising each embedings vectors before concatenation
-            img_embed_norm = img_embeddings/torch.norm(img_embeddings)
+            img_embed_norm = img_embeddings/torch.norm(img_embeddings, dim=1, keepdim=True)
             text_embed_norm = text_embeddings
         
         # Combining embeddings
@@ -84,7 +83,7 @@ def training_loop(epochs, dataloader, model, device):
             # Zeroing batch gradients to stop gradient stacking over batches
             optimiser.zero_grad()
             # Passing values to model
-            input_img, input_cap, labels = torch.stack(batch[0], dim=0).to(device), batch[1], torch.tensor(batch[2], dtype=torch.float32).to(device)
+            input_img, input_cap, labels = torch.stack(batch[0], dim=0).to(device), batch[1], torch.tensor(batch[2], dtype=torch.long).to(device)
             outputs = model(input_img, input_cap)
             # Loss calc and back prop
             loss = nn.functional.cross_entropy(outputs, labels)
@@ -107,21 +106,21 @@ def model_eval(model, test_dataloader, device):
     with torch.no_grad():
         loop = tqdm(test_dataloader, leave=True)
         for batch in loop:
-            input_img, input_cap, labels = torch.stack(batch[0], dim=0).to(device), batch[1], torch.tensor(batch[2], dtype=torch.float32).to(device)
+            input_img, input_cap, labels = torch.stack(batch[0], dim=0).to(device), batch[1], torch.tensor(batch[2], dtype=torch.long).to(device)
             outputs = model(input_img, input_cap)
             loss = nn.functional.cross_entropy(outputs, labels)
-            total_loss += loss.item() * len(batch)
-            total_samples += len(batch)
             predictions = outputs.argmax(dim=1)
+            total_loss += loss.item() * len(predictions)
+            total_samples += len(predictions)
             for i in range(len(predictions)):
                 if predictions[i] == labels[i]:
                     correct_predictions +=1 
-    
+
     accuracy = correct_predictions/total_samples
     average_loss = total_loss/total_samples
 
-    print(f'Complete Model Accuracy: {accuracy_ab1}')
-    print(f'Complete Model Average Loss: {average_loss_ab1}')
+    print(f'Complete Model Accuracy: {accuracy*100}')
+    print(f'Complete Model Average Loss: {average_loss}')
     
     total_loss_ab1 = 0
     total_samples_ab1 = 0
@@ -130,12 +129,12 @@ def model_eval(model, test_dataloader, device):
     with torch.no_grad():
         loop = tqdm(test_dataloader, leave=True)
         for batch in loop:
-            input_img, input_cap, labels = torch.stack(batch[0], dim=0).to(device), batch[1], torch.tensor(batch[2], dtype=torch.float32).to(device)
+            input_img, input_cap, labels = torch.stack(batch[0], dim=0).to(device), batch[1], torch.tensor(batch[2], dtype=torch.long).to(device)
             outputs = model(input_img, input_cap, ablation = 'No_Text')
             loss = nn.functional.cross_entropy(outputs, labels)
-            total_loss_ab1 += loss.item() * len(batch)
-            total_samples_ab1 += len(batch)
             predictions = outputs.argmax(dim=1)
+            total_loss_ab1 += loss.item() * len(predictions)
+            total_samples_ab1 += len(predictions)
             for i in range(len(predictions)):
                 if predictions[i] == labels[i]:
                     correct_predictions_ab1 +=1 
@@ -143,7 +142,7 @@ def model_eval(model, test_dataloader, device):
     accuracy_ab1 = correct_predictions_ab1/total_samples_ab1
     average_loss_ab1 = total_loss_ab1/total_samples_ab1
 
-    print(f'Just Image Embedding Accuracy: {accuracy_ab1}')
+    print(f'Just Image Embedding Accuracy: {accuracy_ab1*100}')
     print(f'Just Image Embedding Average Loss: {average_loss_ab1}')
 
     total_loss_ab2 = 0
@@ -153,20 +152,20 @@ def model_eval(model, test_dataloader, device):
     with torch.no_grad():
         loop = tqdm(test_dataloader, leave=True)
         for batch in loop:
-            input_img, input_cap, labels = torch.stack(batch[0], dim=0).to(device), batch[1], torch.tensor(batch[2], dtype=torch.float32).to(device)
+            input_img, input_cap, labels = torch.stack(batch[0], dim=0).to(device), batch[1], torch.tensor(batch[2], dtype=torch.long).to(device)
             outputs = model(input_img, input_cap, ablation = 'No_Image')
             loss = nn.functional.cross_entropy(outputs, labels)
-            total_loss_ab1 += loss.item() * len(batch)
-            total_samples_ab1 += len(batch)
             predictions = outputs.argmax(dim=1)
+            total_loss_ab2 += loss.item() * len(predictions)
+            total_samples_ab2 += len(predictions)
             for i in range(len(predictions)):
                 if predictions[i] == labels[i]:
-                    correct_predictions_ab1 +=1 
+                    correct_predictions_ab2 +=1 
             
     accuracy_ab2 = correct_predictions_ab2/total_samples_ab2
     average_loss_ab2 = total_loss_ab2/total_samples_ab2
 
-    print(f'Just Caption Embedding Accuracy: {accuracy_ab2}')
+    print(f'Just Caption Embedding Accuracy: {accuracy_ab2*100}')
     print(f'Just Caption Embedding Average Loss: {average_loss_ab2}')
 
 def main():
@@ -176,7 +175,7 @@ def main():
 
     train_dataloader = DataLoader(dataset=train_dataset, batch_size=50, collate_fn = Data.collate_fn)
 
-    trained_model = training_loop(epochs=1, dataloader=train_dataloader, model = MultiModalModel(), device='mps')
+    trained_model = training_loop(epochs=5, dataloader=train_dataloader, model = MultiModalModel(), device='mps')
 
     test_dataloader = DataLoader(dataset=test_dataset, batch_size=25, collate_fn = Data.collate_fn)
 
